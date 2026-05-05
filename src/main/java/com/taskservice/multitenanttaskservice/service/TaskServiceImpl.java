@@ -128,7 +128,7 @@ public class TaskServiceImpl implements TaskService{
         }
         catch (Exception e)
         {
-            return ResponseData.generateFailedRes("failed",null,e.getMessage());
+            return ResponseData.generateFailedRes("failed",null,"Error while fetching User Details");
         }
 
     }

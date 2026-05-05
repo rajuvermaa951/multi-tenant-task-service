@@ -3,6 +3,7 @@ package com.taskservice.multitenanttaskservice.serviceclient.service;
 import com.taskservice.multitenanttaskservice.config.entity.AppParameters;
 import com.taskservice.multitenanttaskservice.config.repository.AppParameterRepository;
 import com.taskservice.multitenanttaskservice.dto.CommonResponse;
+import com.taskservice.multitenanttaskservice.dto.ResponseData;
 import com.taskservice.multitenanttaskservice.serviceclient.entity.ApiRegistry;
 import com.taskservice.multitenanttaskservice.serviceclient.registery.ApiRegisteryService;
 import org.springframework.http.*;
@@ -18,54 +19,61 @@ public class RestTemplateServiceImpl implements RestTemplateService {
     private final ApiRegisteryService apiRegisteryService;
     private final AppParameterRepository appParameterRepository;
 
+
     public RestTemplateServiceImpl(RestTemplate restTemplate,
                                    ObjectMapper objectMapper,
                                    ApiRegisteryService apiRegisteryService,
-                                   AppParameterRepository appParameterRepository)
-    {
-        this.restTemplate=restTemplate;
+                                   AppParameterRepository appParameterRepository) {
+        this.restTemplate = restTemplate;
         this.objectMapper = objectMapper;
         this.apiRegisteryService = apiRegisteryService;
         this.appParameterRepository = appParameterRepository;
     }
 
     @Override
-    public <T, R> R call(String serviceName,String serviceCode, T request, Class<R> responseType) {
+    public <T, R> R call(String serviceName, String serviceCode, T request, Class<R> responseType) {
 
-//        ApiRegistry api = apiRegisteryService.getApi(serviceName,serviceCode);
         AppParameters param = appParameterRepository.findByParamKey("BASE_URL");
         String baseUrl = param.getParamValue();
-        ApiRegistry api = apiRegisteryService.getApi(serviceName,serviceCode);
-        String path = api.getApiPath();
-        String url =baseUrl+path;
+
+        ApiRegistry api = apiRegisteryService.getApi(serviceName, serviceCode);
+        String url = baseUrl + api.getApiPath();
+
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<T> entity = new HttpEntity<>(request,headers);
 
-    ResponseEntity<CommonResponse> response = restTemplate.exchange(
-            url,
-            HttpMethod.valueOf(api.getMethodType()),
-            entity,
-            CommonResponse.class
-    );
-    CommonResponse<?> body = response.getBody();
-    if (body == null ) {
-        throw new RuntimeException("Empty Response from API");
+        HttpEntity<T> entity = new HttpEntity<>(request, headers);
+
+        try {
+            ResponseEntity<CommonResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.valueOf(api.getMethodType()),
+                    entity,
+                    CommonResponse.class
+            );
+
+            CommonResponse<?> body = response.getBody();
+
+            if (body == null) {
+                throw new RuntimeException("Empty response from API: " + url);
+            }
+
+            if (!"1".equals(body.getStatus())) {
+                throw new RuntimeException("API Error: " + body.getErrmsg());
+            }
+
+            if (body.getData() == null) {
+                throw new RuntimeException("API returned null data");
+            }
+
+            return convert(body.getData(), responseType);
+
+        } catch (Exception e) {
+            System.err.println("API call failed for URL: " + url + " : " + e.getMessage());
+        }
+        return null;
     }
-    if ("0".equals(body.getStatus())) {
-        System.err.println(body.getErrmsg());
-        throw new RuntimeException(body.getErrmsg());
-    }
-    if (body.getData() == null) {
-        throw new RuntimeException("Data is null");
-    }
 
-
-    Object data = body.getData();
-
-    return convert(data, responseType);
-
-    }
 
     private  <R> R convert(Object data , Class<R> clazz)
     {
